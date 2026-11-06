@@ -69,14 +69,26 @@ docker pull --quiet redis:7-alpine
 PHASE=STARTING_ISOLATED_SERVICES
 "${COMPOSE[@]}" up -d --wait postgres redis
 
-# The image may lack test gems; production Rails smoke does not claim RSpec PASS.
+# First install the schema in a fresh, synthetic database. Rails runner can eager-load
+# InstallationConfig before the installation_configs table exists (original R5F-3D failure).
+# The image may lack test gems; this is only a production Rails smoke, NOT RSpec.
+PHASE=RAILS_DB_SETUP
+"${COMPOSE[@]}" run --rm --no-deps rails bundle exec rails db:chatwoot_prepare
+
+# Fail closed: the prepare task returning zero does NOT by itself prove tables exist.
+# This SELECT runs ONLY against the disposable database inside the isolated CI project.
+schema_present="$("${COMPOSE[@]}" exec -T postgres \
+  psql -XAt -v ON_ERROR_STOP=1 -U r5f3d_test_only -d chatwoot_production \
+  -c "SELECT to_regclass('public.installation_configs') IS NOT NULL AND to_regclass('public.messages') IS NOT NULL AND to_regclass('public.conversations') IS NOT NULL AND to_regclass('public.accounts') IS NOT NULL")"
+if [ "$schema_present" != 't' ]; then
+  echo 'SCHEMA_INCOMPLETE: Chatwoot required tables not present after db:chatwoot_prepare' >&2
+  exit 31
+fi
+SCHEMA_READY=true
+
 PHASE=RAILS_BOOT
 "${COMPOSE[@]}" run --rm --no-deps rails bundle exec rails runner 'puts "R5F3D_RAILS_BOOT_OK=#{Rails.version}"'
 RAILS_EXECUTED=true
-
-PHASE=RAILS_DB_SETUP
-"${COMPOSE[@]}" run --rm --no-deps rails bundle exec rails db:chatwoot_prepare
-SCHEMA_READY=true
 
 PHASE=RAILS_SMOKE
 "${COMPOSE[@]}" run --rm --no-deps rails bundle exec rails runner /tmp/r5f3d_smoke.rb

@@ -58,10 +58,11 @@ El script hará:
 3. Comprobar que no existe ya un contenedor con el nombre de proyecto de pruebas.
 4. Descargar `chatwoot/chatwoot:v4.19.0` y comprobar **el image ID ARM64 exacto**.
 5. Descargar Postgres con pgvector y Redis; iniciar ambos **vacíos** en una red interna sin puertos publicados.
-6. Ejecutar el proceso real `bundle exec rails runner` para probar el boot.
-7. Ejecutar `bundle exec rails db:chatwoot_prepare` en la DB sintética.
-8. Cargar el runner Ruby de inspección de tablas y del índice no único `source_id`.
-9. Apagar el Compose, eliminar volúmenes, generar JSON, subirlo como artefacto del workflow incluso si el job falla.
+6. Ejecutar `bundle exec rails db:chatwoot_prepare` sobre la DB sintética vacía **antes** del primer `rails runner`.
+7. Comprobar con una consulta SQL de solo lectura que existen `installation_configs`, `messages`, `conversations` y `accounts`; si falta alguna, detenerse sin declarar el esquema listo.
+8. Ejecutar `bundle exec rails runner` para verificar el arranque con el esquema ya preparado.
+9. Cargar el runner Ruby de inspección de tablas y del índice no único `source_id`.
+10. Apagar Compose, eliminar volúmenes, generar JSON y subirlo como artefacto incluso si el job falla.
 
 **Importante:** la base se llama `chatwoot_production` **solo dentro del CI efímero** para ser compatible con el setup de la imagen. Nunca se conecta a ninguna base operativa. Si `db:chatwoot_prepare` falla por variables o por la instalación de la imagen, el diagnóstico se reporta como fallo real, no se salta el paso.
 
