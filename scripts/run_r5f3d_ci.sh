@@ -92,5 +92,10 @@ RAILS_EXECUTED=true
 
 PHASE=RAILS_SMOKE
 "${COMPOSE[@]}" run --rm --no-deps rails bundle exec rails runner /tmp/r5f3d_smoke.rb
+# R5F-3E opt-in: real Chatwoot synthetic PRIVATE notes, no provider or Sidekiq.
+if [[ "${R5F3E_ENABLED:-false}" == "true" ]]; then
+  PHASE=R5F3E_REAL_MESSAGE_WRITE
+  "${COMPOSE[@]}" run --rm --no-deps rails bundle exec rails runner /tmp/r5f3e_write_test.rb
+fi
 PHASE=SMOKE_PASS
 printf '\nPASS R5F-3D RAILS RUNTIME SMOKE (not an idempotency/fencing certification)\n'

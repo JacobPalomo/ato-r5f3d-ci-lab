@@ -32,6 +32,7 @@ services:
       RAILS_ENV: production
       NODE_ENV: production
       RAILS_LOG_TO_STDOUT: 'true'
+      R5F3E_ENABLED: ${R5F3E_ENABLED:-false}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: '5432'
       POSTGRES_DATABASE: chatwoot_production
@@ -48,6 +49,8 @@ services:
       BOOTSNAP_CACHE_DIR: /tmp/bootsnap
     volumes:
       - ./rails/r5f3d_smoke.rb:/tmp/r5f3d_smoke.rb:ro
+      - ./rails/r5f3e_write_test.rb:/tmp/r5f3e_write_test.rb:ro
+      - ./reports:/tmp/r5f3e_reports:rw
     tmpfs:
       - /tmp
       - /app/tmp
