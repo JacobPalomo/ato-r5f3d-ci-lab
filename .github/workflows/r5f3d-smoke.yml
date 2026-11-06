@@ -1,0 +1,35 @@
+name: R5F-3D - Chatwoot Rails isolated smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ato-r5f3d-isolated-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  isolated-rails-smoke:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    env:
+      CI: 'true'
+      R5F3D_JOB: 'true'
+    steps:
+      - name: Checkout test-only repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Preflight and run Chatwoot Rails smoke (synthetic database)
+        shell: bash
+        run: bash scripts/run_r5f3d_ci.sh
+      - name: Archive sanitized verdict (even on failure)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ato-r5f3d-smoke-report
+          path: reports/ato-r5f3d-result.json
+          if-no-files-found: warn
+          retention-days: 7

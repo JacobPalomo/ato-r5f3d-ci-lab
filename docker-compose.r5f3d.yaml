@@ -1,0 +1,65 @@
+# Only for disposable GitHub-hosted CI. Never use with operational Compose.
+name: ato-r5f3d-ci
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: r5f3d_test_only
+      POSTGRES_PASSWORD: r5f3d_ephemeral_no_customer_password
+      POSTGRES_DB: chatwoot_production
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U r5f3d_test_only -d chatwoot_production"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    networks: [isolated]
+    security_opt: [no-new-privileges:true]
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    networks: [isolated]
+    security_opt: [no-new-privileges:true]
+  rails:
+    image: chatwoot/chatwoot:v4.19.0
+    entrypoint: []
+    working_dir: /app
+    environment:
+      RAILS_ENV: production
+      NODE_ENV: production
+      RAILS_LOG_TO_STDOUT: 'true'
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: '5432'
+      POSTGRES_DATABASE: chatwoot_production
+      POSTGRES_USERNAME: r5f3d_test_only
+      POSTGRES_PASSWORD: r5f3d_ephemeral_no_customer_password
+      REDIS_URL: redis://redis:6379
+      SECRET_KEY_BASE: ${R5F3D_SECRET_KEY_BASE:?generated_by_runner_only}
+      FRONTEND_URL: http://chatwoot.invalid
+      INSTALLATION_ENV: r5f3d_ci_synthetic
+      ENABLE_ACCOUNT_SIGNUP: 'false'
+      ACTIVE_STORAGE_SERVICE: local
+      RAILS_MAX_THREADS: '2'
+      WEB_CONCURRENCY: '0'
+      BOOTSNAP_CACHE_DIR: /tmp/bootsnap
+    volumes:
+      - ./rails/r5f3d_smoke.rb:/tmp/r5f3d_smoke.rb:ro
+    tmpfs:
+      - /tmp
+      - /app/tmp
+      - /app/log
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [isolated]
+networks:
+  isolated:
+    internal: true
