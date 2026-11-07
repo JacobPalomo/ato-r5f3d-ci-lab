@@ -33,6 +33,8 @@ services:
       NODE_ENV: production
       RAILS_LOG_TO_STDOUT: 'true'
       R5F3E_ENABLED: ${R5F3E_ENABLED:-false}
+      R5F3F_ENABLED: ${R5F3F_ENABLED:-false}
+      R5F3F_INTERNAL_TOKEN: ${R5F3F_INTERNAL_TOKEN:-}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: '5432'
       POSTGRES_DATABASE: chatwoot_production
@@ -50,6 +52,7 @@ services:
     volumes:
       - ./rails/r5f3d_smoke.rb:/tmp/r5f3d_smoke.rb:ro
       - ./rails/r5f3e_write_test.rb:/tmp/r5f3e_write_test.rb:ro
+      - ./rails/r5f3f_http_contract.rb:/tmp/r5f3f_http_contract.rb:ro
     tmpfs:
       - /tmp
       - /app/tmp
