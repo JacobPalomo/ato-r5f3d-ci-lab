@@ -1,0 +1,34 @@
+name: R5F-3I - Sidekiq + fake WhatsApp provider (isolated CI)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ato-r5f3d-isolated-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  sidekiq-fake-whatsapp:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    env:
+      CI: 'true'
+      R5F3D_JOB: 'true'
+      R5F3I_ENABLED: 'true'
+    steps:
+      - name: Checkout isolated CI repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Execute real Sidekiq SendReplyJob with synthetic WhatsApp channel
+        shell: bash
+        run: bash scripts/run_r5f3d_ci.sh
+      - name: Archive sanitized evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ato-r5f3i-sidekiq-fake-whatsapp-report
+          path: |
+            reports/ato-r5f3d-result.json
+            reports/ato-r5f3i-result.json
+          if-no-files-found: warn
+          retention-days: 7
