@@ -50,7 +50,6 @@ services:
     volumes:
       - ./rails/r5f3d_smoke.rb:/tmp/r5f3d_smoke.rb:ro
       - ./rails/r5f3e_write_test.rb:/tmp/r5f3e_write_test.rb:ro
-      - ./reports:/tmp/r5f3e_reports:rw
     tmpfs:
       - /tmp
       - /app/tmp

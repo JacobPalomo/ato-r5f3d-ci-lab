@@ -14,7 +14,7 @@ class Tests(unittest.TestCase):
     def test_compose_isolated(self):
         c=(ROOT/'docker-compose.r5f3d.yaml').read_text()
         self.assertIn('r5f3e_write_test.rb:ro',c)
-        self.assertIn('reports:/tmp/r5f3e_reports:rw',c)
+        self.assertNotIn('reports:/tmp/r5f3e_reports:rw',c)
         self.assertIn('internal: true',c)
         self.assertIn('R5F3E_ENABLED: ${R5F3E_ENABLED:-false}',c)
     def test_new_workflow_manual(self):

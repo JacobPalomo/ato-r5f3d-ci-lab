@@ -95,7 +95,19 @@ PHASE=RAILS_SMOKE
 # R5F-3E opt-in: real Chatwoot synthetic PRIVATE notes, no provider or Sidekiq.
 if [[ "${R5F3E_ENABLED:-false}" == "true" ]]; then
   PHASE=R5F3E_REAL_MESSAGE_WRITE
-  "${COMPOSE[@]}" run --rm --no-deps rails bundle exec rails runner /tmp/r5f3e_write_test.rb
+  # Rails writes synthetic messages; emit verdict on stdout. The host owns reports/.
+  R5F3E_LOG="$(mktemp "$ROOT/reports/.r5f3e-output.XXXXXXXX")"
+  if ! "${COMPOSE[@]}" run --rm --no-deps rails bundle exec rails runner /tmp/r5f3e_write_test.rb 2>&1 | tee "$R5F3E_LOG"; then
+    rm -f "$R5F3E_LOG"
+    echo 'FAIL R5F-3E: Rails model write or assertions failed' >&2
+    exit 52
+  fi
+  if ! python3 scripts/extract_r5f3e_report.py --input "$R5F3E_LOG" --output reports/ato-r5f3e-result.json; then
+    rm -f "$R5F3E_LOG"
+    echo 'FAIL R5F-3E: missing or invalid functional evidence' >&2
+    exit 53
+  fi
+  rm -f "$R5F3E_LOG"
 fi
 PHASE=SMOKE_PASS
 printf '\nPASS R5F-3D RAILS RUNTIME SMOKE (not an idempotency/fencing certification)\n'

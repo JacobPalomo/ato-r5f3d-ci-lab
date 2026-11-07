@@ -156,6 +156,6 @@ report = {
   production_modified: false,
   note: 'Real Chatwoot private message rows; only ephemeral CI; not a customer-facing demo'
 }
-output = '/tmp/r5f3e_reports/ato-r5f3e-result.json'
-File.write(output, JSON.pretty_generate(report) + "\n")
+# No container-side writes to host bind mounts; emit one machine-readable verdict.
+puts "R5F3E_RESULT_JSON=#{JSON.generate(report)}"
 puts 'PASS R5F-3E REAL_CHATWOOT_PRIVATE_MESSAGE_WRITE'
