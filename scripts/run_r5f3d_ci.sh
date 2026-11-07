@@ -12,6 +12,7 @@ CLEANUP_OK=false
 EXPECTED_IMAGE='sha256:efb1f9fa48a922e74ce7960d44830d7d4d61764bb2295f9bca9d1470cce18275'
 COMPOSE=(docker compose -p ato-r5f3d-ci -f docker-compose.r5f3d.yaml)
 export R5F3D_SECRET_KEY_BASE="$(python3 -c 'import secrets; print(secrets.token_hex(64))')"
+export R5F3F_INTERNAL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
 
 finish() {
   local exit_code="$?"
@@ -108,6 +109,23 @@ if [[ "${R5F3E_ENABLED:-false}" == "true" ]]; then
     exit 53
   fi
   rm -f "$R5F3E_LOG"
+fi
+# R5F-3F: Rails HTTP contract, synthetic private notes only.
+# Runs only on GitHub-hosted ARM64 with Docker compose isolated:true.
+if [[ "${R5F3F_ENABLED:-false}" == "true" ]]; then
+  PHASE=R5F3F_HTTP_CONTRACT
+  R5F3F_LOG="$(mktemp "$ROOT/reports/.r5f3f-output.XXXXXXXX")"
+  if ! "${COMPOSE[@]}" run --rm --no-deps rails bundle exec rails runner /tmp/r5f3f_http_contract.rb 2>&1 | tee "$R5F3F_LOG"; then
+    rm -f "$R5F3F_LOG"
+    echo 'FAIL R5F-3F: Rails HTTP contract assertions failed' >&2
+    exit 62
+  fi
+  if ! python3 scripts/extract_r5f3f_report.py --input "$R5F3F_LOG" --output reports/ato-r5f3f-result.json; then
+    rm -f "$R5F3F_LOG"
+    echo 'FAIL R5F-3F: invalid or absent HTTP verdict' >&2
+    exit 63
+  fi
+  rm -f "$R5F3F_LOG"
 fi
 PHASE=SMOKE_PASS
 printf '\nPASS R5F-3D RAILS RUNTIME SMOKE (not an idempotency/fencing certification)\n'
