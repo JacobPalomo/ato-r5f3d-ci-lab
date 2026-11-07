@@ -14,6 +14,7 @@ COMPOSE=(docker compose -p ato-r5f3d-ci -f docker-compose.r5f3d.yaml)
 export R5F3D_SECRET_KEY_BASE="$(python3 -c 'import secrets; print(secrets.token_hex(64))')"
 export R5F3F_INTERNAL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
 export R5F3G_INTERNAL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+export R5F3H_AGENT_TOKEN="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
 
 finish() {
   local exit_code="$?"
@@ -130,7 +131,7 @@ if [[ "${R5F3F_ENABLED:-false}" == "true" ]]; then
 fi
 # R5F-3G: actual internal HTTP to a separate Rails server; no exposed ports.
 # Strict CI host guard, pinned Chatwoot image, ephemeral DB and teardown above.
-if [[ "${R5F3G_ENABLED:-false}" == "true" ]]; then
+if [[ "${R5F3G_ENABLED:-false}" == "true" && "${R5F3H_ENABLED:-false}" != "true" ]]; then
   PHASE=R5F3G_HTTP_SERVER
   R5F3G_LOG="$(mktemp "$ROOT/reports/.r5f3g-output.XXXXXXXX")"
   # New synthetic tables and a Channel::Api conversation; NEVER use a real inbox.
@@ -154,6 +155,39 @@ if [[ "${R5F3G_ENABLED:-false}" == "true" ]]; then
     exit 73
   fi
   rm -f "$R5F3G_LOG"
+fi
+
+# R5F-3H: authenticated native Chatwoot agent API -> locked handoff (synthetic only).
+# R5F-3G is a dependency, but its prior scenario is intentionally NOT rerun here.
+if [[ "${R5F3H_ENABLED:-false}" == "true" ]]; then
+  PHASE=R5F3H_NATIVE_AGENT_API
+  R5F3H_LOG="$(mktemp "$ROOT/reports/.r5f3h-output.XXXXXXXX")"
+  "${COMPOSE[@]}" run --rm --no-deps rails bundle exec rails runner /tmp/r5f3h_setup.rb | tee "$R5F3H_LOG"
+  R5F3H_ACCOUNT_ID="$(sed -n 's/^R5F3H_ACCOUNT_ID=\([1-9][0-9]*\)$/\1/p' "$R5F3H_LOG")"
+  R5F3H_BOT_FIRST_ID="$(sed -n 's/^R5F3H_BOT_FIRST_ID=\([1-9][0-9]*\)$/\1/p' "$R5F3H_LOG")"
+  R5F3H_BOT_FIRST_DISPLAY="$(sed -n 's/^R5F3H_BOT_FIRST_DISPLAY=\([1-9][0-9]*\)$/\1/p' "$R5F3H_LOG")"
+  R5F3H_HUMAN_FIRST_ID="$(sed -n 's/^R5F3H_HUMAN_FIRST_ID=\([1-9][0-9]*\)$/\1/p' "$R5F3H_LOG")"
+  R5F3H_HUMAN_FIRST_DISPLAY="$(sed -n 's/^R5F3H_HUMAN_FIRST_DISPLAY=\([1-9][0-9]*\)$/\1/p' "$R5F3H_LOG")"
+  for name in R5F3H_ACCOUNT_ID R5F3H_BOT_FIRST_ID R5F3H_BOT_FIRST_DISPLAY R5F3H_HUMAN_FIRST_ID R5F3H_HUMAN_FIRST_DISPLAY; do
+    if [[ ! "${!name}" =~ ^[1-9][0-9]*$ ]]; then
+      echo "FAIL R5F-3H: invalid fixture metadata $name" >&2
+      exit 82
+    fi
+    export "$name"
+  done
+  R5F3H_ENVS=(-e R5F3H_ACCOUNT_ID -e R5F3H_BOT_FIRST_ID -e R5F3H_BOT_FIRST_DISPLAY -e R5F3H_HUMAN_FIRST_ID -e R5F3H_HUMAN_FIRST_DISPLAY)
+  "${COMPOSE[@]}" up -d --wait r5f3g-server
+  "${COMPOSE[@]}" run --rm --no-deps "${R5F3H_ENVS[@]}" -e R5F3H_MODE=initial rails ruby /tmp/r5f3h_probe.rb | tee -a "$R5F3H_LOG"
+  "${COMPOSE[@]}" restart r5f3g-server
+  "${COMPOSE[@]}" up -d --wait r5f3g-server
+  "${COMPOSE[@]}" run --rm --no-deps "${R5F3H_ENVS[@]}" -e R5F3H_MODE=restart rails ruby /tmp/r5f3h_probe.rb | tee -a "$R5F3H_LOG"
+  "${COMPOSE[@]}" run --rm --no-deps "${R5F3H_ENVS[@]}" rails bundle exec rails runner /tmp/r5f3h_verify.rb | tee -a "$R5F3H_LOG"
+  if ! python3 scripts/extract_r5f3h_report.py --input "$R5F3H_LOG" --output reports/ato-r5f3h-result.json; then
+    echo 'FAIL R5F-3H: strict evidence parser rejected the run' >&2
+    rm -f "$R5F3H_LOG"
+    exit 83
+  fi
+  rm -f "$R5F3H_LOG"
 fi
 
 PHASE=SMOKE_PASS

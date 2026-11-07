@@ -38,6 +38,8 @@ services:
       R5F3G_ENABLED: ${R5F3G_ENABLED:-false}
       R5F3G_INTERNAL_TOKEN: ${R5F3G_INTERNAL_TOKEN:-}
       R5F3G_SERVER: r5f3g-server
+      R5F3H_ENABLED: ${R5F3H_ENABLED:-false}
+      R5F3H_AGENT_TOKEN: ${R5F3H_AGENT_TOKEN:-}
       CI: ${CI:-false}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: '5432'
@@ -61,6 +63,9 @@ services:
       - ./rails/r5f3g_takeover.rb:/tmp/r5f3g_takeover.rb:ro
       - ./rails/r5f3g_verify.rb:/tmp/r5f3g_verify.rb:ro
       - ./rails/r5f3g_probe.rb:/tmp/r5f3g_probe.rb:ro
+      - ./rails/r5f3h_setup.rb:/tmp/r5f3h_setup.rb:ro
+      - ./rails/r5f3h_probe.rb:/tmp/r5f3h_probe.rb:ro
+      - ./rails/r5f3h_verify.rb:/tmp/r5f3h_verify.rb:ro
     tmpfs:
       - /tmp
       - /app/tmp
@@ -96,6 +101,8 @@ services:
       SECRET_KEY_BASE: ${R5F3D_SECRET_KEY_BASE:?generated_by_runner_only}
       FRONTEND_URL: http://chatwoot.invalid
       INSTALLATION_ENV: r5f3g_ci_synthetic
+      R5F3H_ENABLED: ${R5F3H_ENABLED:-false}
+      R5F3H_AGENT_TOKEN: ${R5F3H_AGENT_TOKEN:-}
       ENABLE_ACCOUNT_SIGNUP: 'false'
       ACTIVE_STORAGE_SERVICE: local
       FORCE_SSL: 'false'
@@ -104,6 +111,7 @@ services:
       BOOTSNAP_CACHE_DIR: /tmp/bootsnap
     volumes:
       - ./rails/overlay/config/initializers/zz_ato_ci_r5f3g.rb:/app/config/initializers/zz_ato_ci_r5f3g.rb:ro
+      - ./rails/overlay/config/initializers/zz_ato_ci_r5f3h.rb:/app/config/initializers/zz_ato_ci_r5f3h.rb:ro
       - ./rails/overlay/app/controllers/ato_ci_r5f3g_deliveries_controller.rb:/app/app/controllers/ato_ci_r5f3g_deliveries_controller.rb:ro
       - ./rails/overlay/app/models/ato_ci_r5f3g_guard.rb:/app/app/models/ato_ci_r5f3g_guard.rb:ro
       - ./rails/overlay/app/models/ato_ci_r5f3g_receipt.rb:/app/app/models/ato_ci_r5f3g_receipt.rb:ro
