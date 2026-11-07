@@ -25,6 +25,7 @@ conn.create_table :ato_ci_r5f3j2_receipts do |t|
   t.bigint :conversation_id, null: false
   t.bigint :message_id, null: false
   t.string :delivery_key, null: false
+  t.string :claim_id, null: false
   t.string :payload_hash, null: false
   t.integer :epoch, null: false
   t.string :state, null: false
@@ -53,7 +54,7 @@ inbox = Inbox.create!(account: account, channel: channel, name: 'ATO R5F3J2 fake
 contact = Contact.create!(account: account, name: 'CI Synthetic', identifier: "ci-r5f3j2-#{SecureRandom.hex(8)}")
 contact_inbox = ContactInbox.create!(contact: contact, inbox: inbox, source_id: '15550100001')
 fixtures = {}
-%i[sent stale human].each_with_index do |kind, idx|
+%i[sent stale human queued_stale].each_with_index do |kind, idx|
   conv = Conversation.create!(account: account, inbox: inbox, contact: contact, contact_inbox: contact_inbox)
   Message.create!(account: account, inbox: inbox, conversation: conv, sender: contact,
                   message_type: :incoming, private: false, content: 'Synthetic inbound; no Meta')
@@ -66,4 +67,4 @@ fixtures = {}
 end
 puts 'R5F3J2_FIXTURES_JSON=' + JSON.generate({ account_id: account.id, scenarios: fixtures })
 puts 'R5F3J2_SETUP_JSON=' + JSON.generate({ synthetic_whatsapp: true, isolated_ci: true,
-  events: 3, meta_credentials: false })
+  events: 4, meta_credentials: false })

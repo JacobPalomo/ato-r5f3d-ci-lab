@@ -56,7 +56,7 @@ class AtoCiR5f3j2OutboundController < ActionController::API
         }).perform
         raise 'CI_NATIVE_MESSAGE_FAILED' unless msg.persisted? && msg.outgoing? && !msg.private?
         AtoCiR5f3j2Receipt.create!(event_id: authority.event_id, conversation_id: conversation.id,
-          message_id: msg.id, delivery_key: data['delivery_key'], payload_hash: digest,
+          message_id: msg.id, delivery_key: data['delivery_key'], claim_id: authority.claim_id, payload_hash: digest,
           epoch: authority.epoch, state: 'pending', attempts: 0)
         result = { code: 201, duplicate: false, message_id: msg.id }
       end

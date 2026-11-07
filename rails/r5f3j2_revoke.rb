@@ -9,8 +9,12 @@ end
 AtoCiR5f3j2RevokeAuthority.transaction do
   stale = AtoCiR5f3j2RevokeAuthority.lock.find_by!(event_id: f.dig('scenarios', 'stale', 'event_id'))
   human = AtoCiR5f3j2RevokeAuthority.lock.find_by!(event_id: f.dig('scenarios', 'human', 'event_id'))
-  raise 'CI_REVOKE_BAD_STATE' unless [stale, human].all? { |x| x.owner == 'bot' && x.epoch == 1 }
+  queued_stale = AtoCiR5f3j2RevokeAuthority.lock.find_by!(event_id: f.dig('scenarios', 'queued_stale', 'event_id'))
+  raise 'CI_REVOKE_BAD_STATE' unless [stale, human, queued_stale].all? { |x| x.owner == 'bot' && x.epoch == 1 }
   stale.update!(epoch: 2, claim_id: SecureRandom.uuid)
   human.update!(owner: 'human', epoch: 2, event_status: 'manual_review')
+  # The critical attack path: same owner, same epoch, different claim.
+  queued_stale.update!(claim_id: SecureRandom.uuid)
+  raise 'CI_EPOCH_CHANGED' unless queued_stale.reload.epoch == 1 && queued_stale.owner == 'bot'
 end
-puts 'R5F3J2_REVOKE_JSON=' + JSON.generate({ changed_claim: true, human_took_over_before_worker: true })
+puts 'R5F3J2_REVOKE_JSON=' + JSON.generate({ changed_claim: true, human_took_over_before_worker: true, queued_claim_rotated_without_epoch: true })

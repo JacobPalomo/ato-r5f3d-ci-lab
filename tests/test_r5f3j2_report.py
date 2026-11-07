@@ -34,11 +34,11 @@ class ReportTests(unittest.TestCase):
         with self.assertRaises(ValueError): parser.parse_log(bad)
 
     def test_bool_as_number(self):
-        bad = self.valid().replace('"native_messages_created": 2', '"native_messages_created": true')
+        bad = self.valid().replace('"native_messages_created": 3', '"native_messages_created": true')
         with self.assertRaises(ValueError): parser.parse_log(bad)
 
     def test_wrong_count(self):
-        bad = self.valid().replace('"sidekiq_attempts": 3', '"sidekiq_attempts": 2')
+        bad = self.valid().replace('"sidekiq_attempts": 4', '"sidekiq_attempts": 2')
         with self.assertRaises(ValueError): parser.parse_log(bad)
 
     def test_extra_key(self):
@@ -57,6 +57,15 @@ class ReportTests(unittest.TestCase):
         with self.assertRaises(ValueError): parser.parse_log(bad)
 
 class SourceGuards(unittest.TestCase):
+    def test_claim_is_fenced_in_worker(self):
+        worker = (ROOT/'rails/overlay/config/initializers/zz_ato_ci_r5f3j2_worker.rb').read_text()
+        controller = (ROOT/'rails/overlay/app/controllers/ato_ci_r5f3j2_outbound_controller.rb').read_text()
+        setup = (ROOT/'rails/r5f3j2_setup.rb').read_text()
+        self.assertIn('authority.claim_id != receipt.claim_id', worker)
+        self.assertLess(worker.index('authority.claim_id != receipt.claim_id'), worker.index('      super'))
+        self.assertIn('claim_id: authority.claim_id', controller)
+        self.assertIn('t.string :claim_id, null: false', setup)
+
     def test_fake_provider_never_super(self):
         txt = (ROOT/'rails/overlay/config/initializers/zz_ato_ci_r5f3j2_worker.rb').read_text()
         segment = txt.split('module AtoCiR5f3j2FakeProvider',1)[1].split('Rails.application',1)[0]

@@ -37,6 +37,7 @@ if mode == 'initial'
   initial_sent = request(url, token, body(f, 'sent'))
   replay = request(url, token, body(f, 'sent'))
   queued_human = request(url, token, body(f, 'human'))
+  queued_stale = request(url, token, body(f, 'queued_stale'))
   conflict_payload = body(f, 'sent').merge(content: 'Changed payload')
   conflict = request(url, token, conflict_payload)
   unauthorized = request(url, token, body(f, 'sent'), auth_token: 'incorrect')
@@ -44,16 +45,20 @@ if mode == 'initial'
   raise 'CI_INITIAL_FAILURE' unless initial_sent[0] == 201 && initial_sent[1]['processed'] == true &&
     replay[0] == 200 && replay[1]['duplicate'] == true && replay[1]['message_id'] == initial_sent[1]['message_id'] &&
     queued_human[0] == 201 && queued_human[1]['processed'] == true &&
+    queued_stale[0] == 201 && queued_stale[1]['processed'] == true &&
     conflict == [409, {'ok'=>false, 'processed'=>false, 'persisted'=>false, 'reason'=>'idempotency_conflict'}] &&
     unauthorized[0] == 401 && invalid[0] == 422
-  puts 'R5F3J2_INITIAL_JSON=' + JSON.generate({ authorized_201: true, replay_200: true, human_queued_201: true,
+  puts 'R5F3J2_INITIAL_JSON=' + JSON.generate({ authorized_201: true, replay_200: true, human_queued_201: true, queued_stale_201: true,
     conflict_409: true, unauthorized_401: true, unsupported_422: true })
   puts "R5F3J2_SENT_MESSAGE_ID=#{initial_sent[1].fetch('message_id')}"
   puts "R5F3J2_HUMAN_MESSAGE_ID=#{queued_human[1].fetch('message_id')}"
+  puts "R5F3J2_QUEUED_STALE_MESSAGE_ID=#{queued_stale[1].fetch('message_id')}"
 else
   stale = request(url, token, body(f, 'stale'))
   human = request(url, token, body(f, 'human'))
+  queued_stale = request(url, token, body(f, 'queued_stale'))
   raise 'CI_REVOKED_FAILURE' unless stale[0] == 409 && stale[1]['reason'] == 'stale_claim' &&
-                                    human[0] == 409 && human[1]['reason'] == 'human_takeover'
-  puts 'R5F3J2_REVOKED_JSON=' + JSON.generate({ stale_claim_409: true, human_takeover_409: true })
+                                    human[0] == 409 && human[1]['reason'] == 'human_takeover' &&
+                                    queued_stale[0] == 409 && queued_stale[1]['reason'] == 'stale_claim'
+  puts 'R5F3J2_REVOKED_JSON=' + JSON.generate({ stale_claim_409: true, human_takeover_409: true, queued_stale_claim_409: true })
 end

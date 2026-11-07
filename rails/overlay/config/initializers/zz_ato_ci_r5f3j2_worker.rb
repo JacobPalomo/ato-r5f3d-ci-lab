@@ -19,8 +19,14 @@ module AtoCiR5f3j2OutboundGate
       receipt.update!(attempts: receipt.attempts + 1)
       # A previously confirmed send remains terminal, even after later human takeover.
       next if receipt.state == 'sent'
-      if authority.owner != 'bot' || authority.epoch != receipt.epoch || authority.event_status != 'processing'
+      if authority.owner != 'bot'
         receipt.update!(state: 'blocked_human')
+        next
+      end
+      # A claim can rotate WITHOUT changing the epoch. Fence the exact claim
+      # captured by the HTTP request before reaching even the fake provider.
+      if authority.event_status != 'processing' || authority.epoch != receipt.epoch || authority.claim_id != receipt.claim_id
+        receipt.update!(state: 'blocked_stale_claim')
         next
       end
 

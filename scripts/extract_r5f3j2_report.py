@@ -6,14 +6,14 @@ from pathlib import Path
 import sys
 
 EXPECTED = {
-    'R5F3J2_SETUP_JSON=': {'synthetic_whatsapp': True, 'isolated_ci': True, 'events': 3, 'meta_credentials': False},
-    'R5F3J2_INITIAL_JSON=': {'authorized_201': True, 'replay_200': True, 'human_queued_201': True,
+    'R5F3J2_SETUP_JSON=': {'synthetic_whatsapp': True, 'isolated_ci': True, 'events': 4, 'meta_credentials': False},
+    'R5F3J2_INITIAL_JSON=': {'authorized_201': True, 'replay_200': True, 'human_queued_201': True, 'queued_stale_201': True,
                               'conflict_409': True, 'unauthorized_401': True, 'unsupported_422': True},
-    'R5F3J2_REVOKE_JSON=': {'changed_claim': True, 'human_took_over_before_worker': True},
-    'R5F3J2_REVOKED_JSON=': {'stale_claim_409': True, 'human_takeover_409': True},
+    'R5F3J2_REVOKE_JSON=': {'changed_claim': True, 'human_took_over_before_worker': True, 'queued_claim_rotated_without_epoch': True},
+    'R5F3J2_REVOKED_JSON=': {'stale_claim_409': True, 'human_takeover_409': True, 'queued_stale_claim_409': True},
     'R5F3J2_REPLAY_JSON=': {'replay_job_queued': True},
-    'R5F3J2_VERIFY_JSON=': {'native_messages_created': 2, 'sidekiq_attempts': 3,
-        'provider_fake_receipts': 1, 'human_job_blocked': True,
+    'R5F3J2_VERIFY_JSON=': {'native_messages_created': 3, 'sidekiq_attempts': 4,
+        'provider_fake_receipts': 1, 'human_job_blocked': True, 'queued_stale_job_blocked': True,
         'no_duplicate_replay': True, 'no_real_meta': True, 'production_modified': False},
 }
 

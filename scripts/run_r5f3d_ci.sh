@@ -243,7 +243,7 @@ if [[ "${R5F3J2_ENABLED:-false}" == "true" ]]; then
   R5F3J2_LOG="$(mktemp "$ROOT/reports/.r5f3j2-output.XXXXXXXX")"
   "${COMPOSE[@]}" run --rm --no-deps rails bundle exec rails runner /tmp/r5f3j2_setup.rb | tee "$R5F3J2_LOG"
   R5F3J2_FIXTURES_JSON="$(sed -n 's/^R5F3J2_FIXTURES_JSON=//p' "$R5F3J2_LOG")"
-  if ! R5F3J2_FIXTURES_JSON="$R5F3J2_FIXTURES_JSON" python3 -c 'import os,json; x=json.loads(os.environ["R5F3J2_FIXTURES_JSON"]); assert len(x["scenarios"])==3 and x["account_id"]>0'; then
+  if ! R5F3J2_FIXTURES_JSON="$R5F3J2_FIXTURES_JSON" python3 -c 'import os,json; x=json.loads(os.environ["R5F3J2_FIXTURES_JSON"]); assert len(x["scenarios"])==4 and x["account_id"]>0'; then
     echo 'REFUSED: invalid fixture metadata' >&2; exit 102
   fi
   export R5F3J2_FIXTURES_JSON
@@ -251,7 +251,8 @@ if [[ "${R5F3J2_ENABLED:-false}" == "true" ]]; then
   "${COMPOSE[@]}" run --rm --no-deps -e R5F3J2_FIXTURES_JSON -e R5F3J2_TOKEN -e R5F3J2_MODE=initial rails ruby /tmp/r5f3j2_probe.rb | tee -a "$R5F3J2_LOG"
   R5F3J2_SENT_MESSAGE_ID="$(sed -n 's/^R5F3J2_SENT_MESSAGE_ID=\([1-9][0-9]*\)$/\1/p' "$R5F3J2_LOG")"
   R5F3J2_HUMAN_MESSAGE_ID="$(sed -n 's/^R5F3J2_HUMAN_MESSAGE_ID=\([1-9][0-9]*\)$/\1/p' "$R5F3J2_LOG")"
-  for key in R5F3J2_SENT_MESSAGE_ID R5F3J2_HUMAN_MESSAGE_ID; do
+  R5F3J2_QUEUED_STALE_MESSAGE_ID="$(sed -n 's/^R5F3J2_QUEUED_STALE_MESSAGE_ID=\([1-9][0-9]*\)$/\1/p' "$R5F3J2_LOG")"
+  for key in R5F3J2_SENT_MESSAGE_ID R5F3J2_HUMAN_MESSAGE_ID R5F3J2_QUEUED_STALE_MESSAGE_ID; do
     if [[ ! "${!key}" =~ ^[1-9][0-9]*$ ]]; then echo "REFUSED: invalid $key" >&2; exit 103; fi
     export "$key"
   done
@@ -263,8 +264,8 @@ if [[ "${R5F3J2_ENABLED:-false}" == "true" ]]; then
     for n in $(seq 1 60); do
       status="$("${COMPOSE[@]}" exec -T postgres psql -XAt -v ON_ERROR_STOP=1 \
         -U r5f3d_test_only -d chatwoot_production -c \
-        "SELECT (SELECT state || ':' || attempts FROM ato_ci_r5f3j2_receipts WHERE message_id=$R5F3J2_SENT_MESSAGE_ID) || ',' || (SELECT state || ':' || attempts FROM ato_ci_r5f3j2_receipts WHERE message_id=$R5F3J2_HUMAN_MESSAGE_ID) || ',' || (SELECT COUNT(*) FROM ato_ci_r5f3j2_sink)")"
-      if [[ "$status" == "sent:${target},blocked_human:1,1" ]]; then return 0; fi
+        "SELECT (SELECT state || ':' || attempts FROM ato_ci_r5f3j2_receipts WHERE message_id=$R5F3J2_SENT_MESSAGE_ID) || ',' || (SELECT state || ':' || attempts FROM ato_ci_r5f3j2_receipts WHERE message_id=$R5F3J2_HUMAN_MESSAGE_ID) || ',' || (SELECT state || ':' || attempts FROM ato_ci_r5f3j2_receipts WHERE message_id=$R5F3J2_QUEUED_STALE_MESSAGE_ID) || ',' || (SELECT COUNT(*) FROM ato_ci_r5f3j2_sink)")"
+      if [[ "$status" == "sent:${target},blocked_human:1,blocked_stale_claim:1,1" ]]; then return 0; fi
       sleep 2
     done
     echo "R5F3J2_WAIT_FAILED: $status" >&2
@@ -274,7 +275,7 @@ if [[ "${R5F3J2_ENABLED:-false}" == "true" ]]; then
   r5f3j2_wait 1 || exit 104
   "${COMPOSE[@]}" run --rm --no-deps -e R5F3J2_SENT_MESSAGE_ID rails bundle exec rails runner /tmp/r5f3j2_reenqueue.rb | tee -a "$R5F3J2_LOG"
   r5f3j2_wait 2 || exit 105
-  "${COMPOSE[@]}" run --rm --no-deps -e R5F3J2_FIXTURES_JSON -e R5F3J2_SENT_MESSAGE_ID -e R5F3J2_HUMAN_MESSAGE_ID rails bundle exec rails runner /tmp/r5f3j2_verify.rb | tee -a "$R5F3J2_LOG"
+  "${COMPOSE[@]}" run --rm --no-deps -e R5F3J2_FIXTURES_JSON -e R5F3J2_SENT_MESSAGE_ID -e R5F3J2_HUMAN_MESSAGE_ID -e R5F3J2_QUEUED_STALE_MESSAGE_ID rails bundle exec rails runner /tmp/r5f3j2_verify.rb | tee -a "$R5F3J2_LOG"
   if ! python3 scripts/extract_r5f3j2_report.py --input "$R5F3J2_LOG" --output reports/ato-r5f3j2-result.json; then
     echo 'FAIL R5F-3J-02: strict evidence parser rejected run' >&2; exit 106
   fi
