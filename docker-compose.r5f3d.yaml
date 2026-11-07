@@ -41,6 +41,7 @@ services:
       R5F3H_ENABLED: ${R5F3H_ENABLED:-false}
       R5F3H_AGENT_TOKEN: ${R5F3H_AGENT_TOKEN:-}
       R5F3I_ENABLED: ${R5F3I_ENABLED:-false}
+      R5F3J2_ENABLED: ${R5F3J2_ENABLED:-false}
       CI: ${CI:-false}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: '5432'
@@ -71,6 +72,11 @@ services:
       - ./rails/r5f3i_enqueue.rb:/tmp/r5f3i_enqueue.rb:ro
       - ./rails/r5f3i_reenqueue.rb:/tmp/r5f3i_reenqueue.rb:ro
       - ./rails/r5f3i_verify.rb:/tmp/r5f3i_verify.rb:ro
+      - ./rails/r5f3j2_setup.rb:/tmp/r5f3j2_setup.rb:ro
+      - ./rails/r5f3j2_probe.rb:/tmp/r5f3j2_probe.rb:ro
+      - ./rails/r5f3j2_revoke.rb:/tmp/r5f3j2_revoke.rb:ro
+      - ./rails/r5f3j2_reenqueue.rb:/tmp/r5f3j2_reenqueue.rb:ro
+      - ./rails/r5f3j2_verify.rb:/tmp/r5f3j2_verify.rb:ro
     tmpfs:
       - /tmp
       - /app/tmp
@@ -175,6 +181,106 @@ services:
       BOOTSNAP_CACHE_DIR: /tmp/bootsnap
     volumes:
       - ./rails/overlay/config/initializers/zz_ato_ci_r5f3i.rb:/app/config/initializers/zz_ato_ci_r5f3i.rb:ro
+    tmpfs:
+      - /tmp
+      - /app/tmp
+      - /app/log
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [isolated]
+
+  # R5F-3J-02: isolated CI native HTTP endpoint, NO published ports.
+  r5f3j2-server:
+    image: chatwoot/chatwoot:v4.19.0
+    entrypoint: []
+    command: ["bundle", "exec", "rails", "server", "-b", "0.0.0.0", "-p", "3000"]
+    working_dir: /app
+    environment:
+      RAILS_ENV: production
+      NODE_ENV: production
+      RAILS_LOG_TO_STDOUT: 'true'
+      R5F3J2_ENABLED: ${R5F3J2_ENABLED:-false}
+      R5F3J2_ROLE: http
+      R5F3J2_TOKEN: ${R5F3J2_TOKEN:-}
+      GITHUB_ACTIONS: ${GITHUB_ACTIONS:-false}
+      CI: ${CI:-false}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: '5432'
+      POSTGRES_DATABASE: chatwoot_production
+      POSTGRES_USERNAME: r5f3d_test_only
+      POSTGRES_PASSWORD: r5f3d_ephemeral_no_customer_password
+      REDIS_URL: redis://redis:6379
+      SECRET_KEY_BASE: ${R5F3D_SECRET_KEY_BASE:?generated_by_runner_only}
+      FRONTEND_URL: http://chatwoot.invalid
+      INSTALLATION_ENV: r5f3j2_ci_synthetic
+      ENABLE_ACCOUNT_SIGNUP: 'false'
+      ACTIVE_STORAGE_SERVICE: local
+      FORCE_SSL: 'false'
+      RAILS_MAX_THREADS: '3'
+      WEB_CONCURRENCY: '0'
+      BOOTSNAP_CACHE_DIR: /tmp/bootsnap
+    volumes:
+      - ./rails/overlay/config/initializers/zz_ato_ci_r5f3j2_server.rb:/app/config/initializers/zz_ato_ci_r5f3j2_server.rb:ro
+      - ./rails/overlay/app/controllers/ato_ci_r5f3j2_outbound_controller.rb:/app/app/controllers/ato_ci_r5f3j2_outbound_controller.rb:ro
+    tmpfs:
+      - /tmp
+      - /app/tmp
+      - /app/log
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [isolated]
+    healthcheck:
+      test:
+        - CMD
+        - ruby
+        - -rnet/http
+        - -e
+        - >-
+          h=Net::HTTP.new('127.0.0.1',3000,nil);h.open_timeout=2;h.read_timeout=3;q=Net::HTTP::Post.new('/internal/ato/r5f3j2/outbound');q['Host']='chatwoot.invalid';q['Content-Type']='application/json';q.body='{}';r=h.request(q);exit(r.code=='401' ? 0 : 1)
+      interval: 5s
+      timeout: 5s
+      retries: 36
+      start_period: 15s
+
+  # Runs only ato_ci_r5f3j2 queue. Fake provider never calls Meta.
+  r5f3j2-worker:
+    image: chatwoot/chatwoot:v4.19.0
+    entrypoint: []
+    command: ["bundle", "exec", "sidekiq", "-q", "ato_ci_r5f3j2", "-c", "1"]
+    working_dir: /app
+    environment:
+      RAILS_ENV: production
+      NODE_ENV: production
+      RAILS_LOG_TO_STDOUT: 'true'
+      R5F3J2_ENABLED: ${R5F3J2_ENABLED:-false}
+      R5F3J2_ROLE: worker
+      GITHUB_ACTIONS: ${GITHUB_ACTIONS:-false}
+      CI: ${CI:-false}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: '5432'
+      POSTGRES_DATABASE: chatwoot_production
+      POSTGRES_USERNAME: r5f3d_test_only
+      POSTGRES_PASSWORD: r5f3d_ephemeral_no_customer_password
+      REDIS_URL: redis://redis:6379
+      SECRET_KEY_BASE: ${R5F3D_SECRET_KEY_BASE:?generated_by_runner_only}
+      FRONTEND_URL: http://chatwoot.invalid
+      INSTALLATION_ENV: r5f3j2_ci_synthetic
+      ENABLE_ACCOUNT_SIGNUP: 'false'
+      ACTIVE_STORAGE_SERVICE: local
+      SIDEKIQ_CONCURRENCY: '1'
+      BOOTSNAP_CACHE_DIR: /tmp/bootsnap
+    volumes:
+      - ./rails/overlay/config/initializers/zz_ato_ci_r5f3j2_worker.rb:/app/config/initializers/zz_ato_ci_r5f3j2_worker.rb:ro
     tmpfs:
       - /tmp
       - /app/tmp
