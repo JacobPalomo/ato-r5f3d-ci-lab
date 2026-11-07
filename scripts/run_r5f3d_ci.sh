@@ -13,6 +13,7 @@ EXPECTED_IMAGE='sha256:efb1f9fa48a922e74ce7960d44830d7d4d61764bb2295f9bca9d1470c
 COMPOSE=(docker compose -p ato-r5f3d-ci -f docker-compose.r5f3d.yaml)
 export R5F3D_SECRET_KEY_BASE="$(python3 -c 'import secrets; print(secrets.token_hex(64))')"
 export R5F3F_INTERNAL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+export R5F3G_INTERNAL_TOKEN="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
 
 finish() {
   local exit_code="$?"
@@ -127,5 +128,33 @@ if [[ "${R5F3F_ENABLED:-false}" == "true" ]]; then
   fi
   rm -f "$R5F3F_LOG"
 fi
+# R5F-3G: actual internal HTTP to a separate Rails server; no exposed ports.
+# Strict CI host guard, pinned Chatwoot image, ephemeral DB and teardown above.
+if [[ "${R5F3G_ENABLED:-false}" == "true" ]]; then
+  PHASE=R5F3G_HTTP_SERVER
+  R5F3G_LOG="$(mktemp "$ROOT/reports/.r5f3g-output.XXXXXXXX")"
+  # New synthetic tables and a Channel::Api conversation; NEVER use a real inbox.
+  "${COMPOSE[@]}" run --rm --no-deps rails bundle exec rails runner /tmp/r5f3g_setup.rb | tee "$R5F3G_LOG"
+  R5F3G_CID="$(sed -n 's/^R5F3G_FIXTURE_ID=\([1-9][0-9]*\)$/\1/p' "$R5F3G_LOG")"
+  if [[ ! "$R5F3G_CID" =~ ^[1-9][0-9]*$ ]]; then
+    echo 'FAIL R5F-3G: fixture id missing/ambiguous' >&2
+    exit 72
+  fi
+  "${COMPOSE[@]}" up -d --wait r5f3g-server
+  "${COMPOSE[@]}" run --rm --no-deps -e R5F3G_CONVERSATION_ID="$R5F3G_CID" -e R5F3G_MODE=initial rails ruby /tmp/r5f3g_probe.rb | tee -a "$R5F3G_LOG"
+  "${COMPOSE[@]}" restart r5f3g-server
+  "${COMPOSE[@]}" up -d --wait r5f3g-server
+  "${COMPOSE[@]}" run --rm --no-deps -e R5F3G_CONVERSATION_ID="$R5F3G_CID" -e R5F3G_MODE=replay rails ruby /tmp/r5f3g_probe.rb | tee -a "$R5F3G_LOG"
+  "${COMPOSE[@]}" run --rm --no-deps -e R5F3G_CONVERSATION_ID="$R5F3G_CID" rails bundle exec rails runner /tmp/r5f3g_takeover.rb | tee -a "$R5F3G_LOG"
+  "${COMPOSE[@]}" run --rm --no-deps -e R5F3G_CONVERSATION_ID="$R5F3G_CID" -e R5F3G_MODE=takeover rails ruby /tmp/r5f3g_probe.rb | tee -a "$R5F3G_LOG"
+  "${COMPOSE[@]}" run --rm --no-deps -e R5F3G_CONVERSATION_ID="$R5F3G_CID" rails bundle exec rails runner /tmp/r5f3g_verify.rb | tee -a "$R5F3G_LOG"
+  if ! python3 scripts/extract_r5f3g_report.py --input "$R5F3G_LOG" --output reports/ato-r5f3g-result.json; then
+    echo 'FAIL R5F-3G: evidence validation rejected' >&2
+    rm -f "$R5F3G_LOG"
+    exit 73
+  fi
+  rm -f "$R5F3G_LOG"
+fi
+
 PHASE=SMOKE_PASS
 printf '\nPASS R5F-3D RAILS RUNTIME SMOKE (not an idempotency/fencing certification)\n'

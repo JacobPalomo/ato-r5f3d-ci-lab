@@ -35,6 +35,10 @@ services:
       R5F3E_ENABLED: ${R5F3E_ENABLED:-false}
       R5F3F_ENABLED: ${R5F3F_ENABLED:-false}
       R5F3F_INTERNAL_TOKEN: ${R5F3F_INTERNAL_TOKEN:-}
+      R5F3G_ENABLED: ${R5F3G_ENABLED:-false}
+      R5F3G_INTERNAL_TOKEN: ${R5F3G_INTERNAL_TOKEN:-}
+      R5F3G_SERVER: r5f3g-server
+      CI: ${CI:-false}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: '5432'
       POSTGRES_DATABASE: chatwoot_production
@@ -53,6 +57,10 @@ services:
       - ./rails/r5f3d_smoke.rb:/tmp/r5f3d_smoke.rb:ro
       - ./rails/r5f3e_write_test.rb:/tmp/r5f3e_write_test.rb:ro
       - ./rails/r5f3f_http_contract.rb:/tmp/r5f3f_http_contract.rb:ro
+      - ./rails/r5f3g_setup.rb:/tmp/r5f3g_setup.rb:ro
+      - ./rails/r5f3g_takeover.rb:/tmp/r5f3g_takeover.rb:ro
+      - ./rails/r5f3g_verify.rb:/tmp/r5f3g_verify.rb:ro
+      - ./rails/r5f3g_probe.rb:/tmp/r5f3g_probe.rb:ro
     tmpfs:
       - /tmp
       - /app/tmp
@@ -65,6 +73,65 @@ services:
       redis:
         condition: service_healthy
     networks: [isolated]
+  # Persistent route over an ACTUAL Rails HTTP server; never published to host.
+  # Overlay files are read-only into the disposable CI image only.
+  r5f3g-server:
+    image: chatwoot/chatwoot:v4.19.0
+    entrypoint: []
+    command: ["bundle", "exec", "rails", "server", "-b", "0.0.0.0", "-p", "3000"]
+    working_dir: /app
+    environment:
+      RAILS_ENV: production
+      NODE_ENV: production
+      RAILS_LOG_TO_STDOUT: 'true'
+      R5F3G_ENABLED: ${R5F3G_ENABLED:-false}
+      R5F3G_INTERNAL_TOKEN: ${R5F3G_INTERNAL_TOKEN:-}
+      CI: ${CI:-false}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: '5432'
+      POSTGRES_DATABASE: chatwoot_production
+      POSTGRES_USERNAME: r5f3d_test_only
+      POSTGRES_PASSWORD: r5f3d_ephemeral_no_customer_password
+      REDIS_URL: redis://redis:6379
+      SECRET_KEY_BASE: ${R5F3D_SECRET_KEY_BASE:?generated_by_runner_only}
+      FRONTEND_URL: http://chatwoot.invalid
+      INSTALLATION_ENV: r5f3g_ci_synthetic
+      ENABLE_ACCOUNT_SIGNUP: 'false'
+      ACTIVE_STORAGE_SERVICE: local
+      FORCE_SSL: 'false'
+      RAILS_MAX_THREADS: '3'
+      WEB_CONCURRENCY: '0'
+      BOOTSNAP_CACHE_DIR: /tmp/bootsnap
+    volumes:
+      - ./rails/overlay/config/initializers/zz_ato_ci_r5f3g.rb:/app/config/initializers/zz_ato_ci_r5f3g.rb:ro
+      - ./rails/overlay/app/controllers/ato_ci_r5f3g_deliveries_controller.rb:/app/app/controllers/ato_ci_r5f3g_deliveries_controller.rb:ro
+      - ./rails/overlay/app/models/ato_ci_r5f3g_guard.rb:/app/app/models/ato_ci_r5f3g_guard.rb:ro
+      - ./rails/overlay/app/models/ato_ci_r5f3g_receipt.rb:/app/app/models/ato_ci_r5f3g_receipt.rb:ro
+    tmpfs:
+      - /tmp
+      - /app/tmp
+      - /app/log
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [isolated]
+    healthcheck:
+      test:
+        - CMD
+        - ruby
+        - -rnet/http
+        - -e
+        - >-
+          h=Net::HTTP.new('127.0.0.1',3000,nil);h.open_timeout=2;h.read_timeout=3;q=Net::HTTP::Post.new('/internal/ato/r5f3g/deliver');q['Host']='chatwoot.invalid';q['Content-Type']='application/json';q.body='{}';r=h.request(q);exit(r.code=='401' ? 0 : 1)
+      interval: 5s
+      timeout: 5s
+      retries: 36
+      start_period: 15s
+
 networks:
   isolated:
     internal: true
