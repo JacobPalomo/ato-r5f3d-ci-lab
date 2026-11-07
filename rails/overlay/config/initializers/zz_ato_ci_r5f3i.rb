@@ -41,7 +41,7 @@ module AtoCiR5f3iFakeWhatsappProvider
   def send_message(recipient, message)
     raise 'CI_FAKE_PROVIDER_UNEXPECTED_ACCOUNT' unless message.account.name == 'ATO R5F3I synthetic isolated'
     raise 'CI_FAKE_PROVIDER_WRONG_CHANNEL' unless message.inbox.channel_type == 'Channel::Whatsapp'
-    raise 'CI_FAKE_PROVIDER_WRONG_RECIPIENT' unless recipient == 'ci-recipient-r5f3i'
+    raise 'CI_FAKE_PROVIDER_WRONG_RECIPIENT' unless recipient == '15550100001'
     raise 'CI_FAKE_PROVIDER_PRIVATE_MESSAGE' if message.private? || !message.outgoing?
     raise 'CI_FAKE_PROVIDER_UNGUARDED_CALL' unless ActiveRecord::Base.connection.transaction_open?
 

@@ -47,7 +47,7 @@ channel = Channel::Whatsapp.find(created.rows.fetch(0).fetch(0))
 inbox = Inbox.create!(account: account, channel: channel, name: 'ATO R5F3I disposable fake WhatsApp',
                       enable_auto_assignment: false)
 contact = Contact.create!(account: account, name: 'CI Synthetic Visitor', identifier: "ci-r5f3i-#{SecureRandom.hex(8)}")
-ci = ContactInbox.create!(contact: contact, inbox: inbox, source_id: 'ci-recipient-r5f3i')
+ci = ContactInbox.create!(contact: contact, inbox: inbox, source_id: '15550100001')
 conversations = 2.times.map do
   conversation = Conversation.create!(account: account, inbox: inbox, contact: contact, contact_inbox: ci)
   Message.create!(account: account, inbox: inbox, conversation: conversation, sender: contact,
