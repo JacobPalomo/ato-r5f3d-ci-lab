@@ -190,5 +190,50 @@ if [[ "${R5F3H_ENABLED:-false}" == "true" ]]; then
   rm -f "$R5F3H_LOG"
 fi
 
+# R5F-3I: genuine Chatwoot SendReplyJob in Sidekiq, FAKE WhatsApp boundary.
+# Does not contact Meta, send customer messages, or modify an operational system.
+if [[ "${R5F3I_ENABLED:-false}" == "true" ]]; then
+  PHASE=R5F3I_SIDEKIQ_FAKE_WHATSAPP
+  R5F3I_LOG="$(mktemp "$ROOT/reports/.r5f3i-output.XXXXXXXX")"
+  "${COMPOSE[@]}" run --rm --no-deps rails bundle exec rails runner /tmp/r5f3i_setup.rb | tee "$R5F3I_LOG"
+  R5F3I_BOT_ID="$(sed -n 's/^R5F3I_BOT_ID=\([1-9][0-9]*\)$/\1/p' "$R5F3I_LOG")"
+  R5F3I_BLOCKED_ID="$(sed -n 's/^R5F3I_BLOCKED_ID=\([1-9][0-9]*\)$/\1/p' "$R5F3I_LOG")"
+  for name in R5F3I_BOT_ID R5F3I_BLOCKED_ID; do
+    if [[ ! "${!name}" =~ ^[1-9][0-9]*$ ]]; then echo "REFUSED: invalid $name" >&2; exit 92; fi
+    export "$name"
+  done
+  "${COMPOSE[@]}" run --rm --no-deps -e R5F3I_BOT_ID -e R5F3I_BLOCKED_ID rails bundle exec rails runner /tmp/r5f3i_enqueue.rb | tee -a "$R5F3I_LOG"
+  R5F3I_SENT_MESSAGE_ID="$(sed -n 's/^R5F3I_SENT_MESSAGE_ID=\([1-9][0-9]*\)$/\1/p' "$R5F3I_LOG")"
+  R5F3I_BLOCKED_MESSAGE_ID="$(sed -n 's/^R5F3I_BLOCKED_MESSAGE_ID=\([1-9][0-9]*\)$/\1/p' "$R5F3I_LOG")"
+  for name in R5F3I_SENT_MESSAGE_ID R5F3I_BLOCKED_MESSAGE_ID; do
+    if [[ ! "${!name}" =~ ^[1-9][0-9]*$ ]]; then echo "REFUSED: invalid $name" >&2; exit 93; fi
+    export "$name"
+  done
+  "${COMPOSE[@]}" up -d r5f3i-worker
+  # Query only synthetic local PG tables, with bounded waiting and no network calls.
+  r5f3i_wait_state() {
+    local want_sent="$1" state="" n
+    for n in $(seq 1 60); do
+      state="$("${COMPOSE[@]}" exec -T postgres psql -XAt -v ON_ERROR_STOP=1 \
+        -U r5f3d_test_only -d chatwoot_production -c \
+        "SELECT (SELECT state || ':' || attempts FROM ato_ci_r5f3i_deliveries WHERE message_id=$R5F3I_SENT_MESSAGE_ID) || ',' || (SELECT state || ':' || attempts FROM ato_ci_r5f3i_deliveries WHERE message_id=$R5F3I_BLOCKED_MESSAGE_ID) || ',' || (SELECT COUNT(*) FROM ato_ci_r5f3i_sink)")"
+      if [[ "$state" == "sent:${want_sent},blocked_human:1,1" ]]; then return 0; fi
+      sleep 2
+    done
+    echo "R5F3I_WAIT_FAILED: synthetic jobs not completed (state=$state)" >&2
+    "${COMPOSE[@]}" logs --tail=60 r5f3i-worker >&2 || true
+    return 1
+  }
+  r5f3i_wait_state 1 || exit 94
+  "${COMPOSE[@]}" run --rm --no-deps -e R5F3I_SENT_MESSAGE_ID rails bundle exec rails runner /tmp/r5f3i_reenqueue.rb | tee -a "$R5F3I_LOG"
+  r5f3i_wait_state 2 || exit 95
+  "${COMPOSE[@]}" run --rm --no-deps -e R5F3I_SENT_MESSAGE_ID -e R5F3I_BLOCKED_MESSAGE_ID rails bundle exec rails runner /tmp/r5f3i_verify.rb | tee -a "$R5F3I_LOG"
+  if ! python3 scripts/extract_r5f3i_report.py --input "$R5F3I_LOG" --output reports/ato-r5f3i-result.json; then
+    echo 'FAIL R5F-3I: evidence parser rejected this run' >&2
+    exit 96
+  fi
+  rm -f "$R5F3I_LOG"
+fi
+
 PHASE=SMOKE_PASS
 printf '\nPASS R5F-3D RAILS RUNTIME SMOKE (not an idempotency/fencing certification)\n'
